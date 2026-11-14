@@ -29,10 +29,10 @@ npm start
 
 ## Release
 
-Push a tag like `v0.1.1`. GitHub Actions builds the macOS `.dmg` and Windows `.exe` and attaches them to a release.
+Bump the version in `package.json` and push to `main`. GitHub Actions builds the macOS `.dmg` and Windows `.exe` and attaches them to a release.
 
 ```bash
-npm version patch && git push --follow-tags
+npm version patch --no-git-tag-version && git commit -am "v$(node -p "require('./package.json').version")" && git push
 ```
 
 ## License
