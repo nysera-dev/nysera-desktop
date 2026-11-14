@@ -1,8 +1,8 @@
 {
   "name": "nysera-desktop",
   "productName": "Nysera",
-  "version": "0.1.0",
-  "description": "Nysera Desktop — chat with your AI agents and run multi-model lanes on your own projects.",
+  "version": "0.1.1",
+  "description": "Nysera Desktop \u2014 chat with your AI agents and run multi-model lanes on your own projects.",
   "author": "nysera-dev",
   "license": "MIT",
   "type": "module",
@@ -19,20 +19,44 @@
   "build": {
     "appId": "app.nysera.desktop",
     "productName": "Nysera",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["src/**/*", "renderer/**/*", "build/icon.png", "package.json"],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "renderer/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.png",
-      "identity": "-",
+      "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "Nysera-mac-arm64.${ext}"
     },
-    "dmg": { "title": "Nysera" },
+    "dmg": {
+      "title": "Nysera"
+    },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
       "artifactName": "Nysera-Setup-win-x64.${ext}"
     },
@@ -41,6 +65,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "shortcutName": "Nysera"
-    }
+    },
+    "afterPack": "build/afterPack.cjs"
   }
 }
