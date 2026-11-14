@@ -1,0 +1,63 @@
+name: Build installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            args: --mac dmg --arm64
+          - os: windows-latest
+            args: --win nsis --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+          body: |
+            **Nysera Desktop ${{ github.ref_name }}**
+
+            - macOS (Apple silicon): `Nysera-mac-arm64.dmg`
+            - Windows (x64): `Nysera-Setup-win-x64.exe`
+
+            The app is not code-signed yet, so your OS will warn on first launch:
+            - macOS: open it once, then System Settings → Privacy & Security → **Open Anyway**.
+            - Windows: on the SmartScreen screen click **More info → Run anyway**.
+
+            You need your own OpenRouter API key (Settings in the app), or turn on demo mode to try it.

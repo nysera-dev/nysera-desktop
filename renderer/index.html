@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'">
+<title>Nysera</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Silkscreen:wght@700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="drag"></div>
+    <div class="brand"><img src="assets/nysera-logo.png" alt=""><span class="wm grad">NYSERA</span></div>
+    <div class="label">Bots</div>
+    <nav id="bots" class="list"></nav>
+    <div class="label">Work</div>
+    <nav class="list">
+      <button class="item" data-view="run" id="nav-run">
+        <span class="ico run-ico" aria-hidden="true">▶</span>
+        <span class="meta"><span class="name">Run lanes</span><span class="sub" id="run-sub">plan → lanes → verify</span></span>
+      </button>
+    </nav>
+    <div class="grow"></div>
+    <button class="item" data-view="settings" id="nav-settings">
+      <span class="ico" aria-hidden="true">⚙</span>
+      <span class="meta"><span class="name">Settings</span><span class="sub" id="key-sub">—</span></span>
+    </button>
+    <div class="ver" id="ver"></div>
+  </aside>
+
+  <main class="main">
+    <!-- CHAT -->
+    <section id="view-chat" class="view">
+      <header class="head">
+        <span class="avatar" id="chat-avatar"></span>
+        <div class="htext"><div class="htitle" id="chat-name"></div><div class="hsub" id="chat-role"></div></div>
+        <div class="grow"></div>
+        <label class="sr" for="chat-model">Model</label>
+        <select id="chat-model" class="select"></select>
+        <button class="ghost" id="chat-clear">New chat</button>
+      </header>
+      <div class="banner" id="key-banner" hidden>
+        <span>Add your OpenRouter key to get real answers — or try demo mode.</span>
+        <button class="pill" id="banner-settings">Open Settings</button>
+      </div>
+      <div class="msgs" id="msgs" aria-live="polite"></div>
+      <form class="composer" id="composer">
+        <label class="sr" for="input">Message</label>
+        <textarea id="input" rows="1" placeholder="Message Nysera…"></textarea>
+        <button type="submit" class="send" id="send" aria-label="Send">↑</button>
+      </form>
+    </section>
+
+    <!-- RUN -->
+    <section id="view-run" class="view" hidden>
+      <header class="head">
+        <span class="avatar run-av" aria-hidden="true">▶</span>
+        <div class="htext"><div class="htitle">Run lanes</div><div class="hsub">The planner splits your task into lanes, runs them in parallel, then checks the work.</div></div>
+      </header>
+      <div class="scroll">
+        <div class="card form">
+          <div class="row">
+            <div class="field grow">
+              <div class="flabel">Project folder</div>
+              <div class="dir" id="dir">No folder chosen</div>
+            </div>
+            <button class="pill" id="pick">Choose folder…</button>
+          </div>
+          <div class="field">
+            <label class="flabel" for="task">Task</label>
+            <textarea id="task" rows="3" placeholder="e.g. add a /health endpoint to the express app and a test for it"></textarea>
+          </div>
+          <div class="row wrap">
+            <label class="check"><input type="checkbox" id="opt-write"> <span>Write files into the project <em>(originals backed up)</em></span></label>
+            <label class="check"><input type="checkbox" id="opt-review" checked> <span>Reviewer model checks each lane</span></label>
+          </div>
+          <div class="field">
+            <label class="flabel" for="opt-test">Test command <em>(optional — pass → lanes verified)</em></label>
+            <input id="opt-test" class="mono" placeholder="npm test">
+          </div>
+          <div class="row">
+            <button class="primary" id="run-btn">Start run</button>
+            <span class="hint" id="run-hint"></span>
+          </div>
+        </div>
+
+        <div class="card board" id="board" hidden>
+          <div class="board-head"><span class="mono dim">LANES</span><span class="mono dim" id="board-count"></span></div>
+          <div id="lanes"></div>
+        </div>
+        <div class="card" id="summary" hidden></div>
+        <div class="card log" id="log-card" hidden>
+          <div class="mono dim">EVENTS</div>
+          <div id="log"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view" hidden>
+      <header class="head">
+        <span class="avatar run-av" aria-hidden="true">⚙</span>
+        <div class="htext"><div class="htitle">Settings</div><div class="hsub">Your key stays on this computer, encrypted by your OS keychain when available.</div></div>
+      </header>
+      <div class="scroll">
+        <div class="card form">
+          <div class="field">
+            <label class="flabel" for="key">OpenRouter API key</label>
+            <div class="row">
+              <input id="key" type="password" class="mono grow" placeholder="sk-or-v1-…" autocomplete="off">
+              <button class="pill" id="key-save">Save</button>
+              <button class="ghost" id="key-test">Test</button>
+            </div>
+            <div class="hint" id="key-status"></div>
+            <div class="hint">No key yet? <a href="https://openrouter.ai/settings/keys" target="_blank">Create one at openrouter.ai</a> and set a credit limit on it.</div>
+          </div>
+          <div class="field">
+            <label class="flabel" for="default-model">Default chat model</label>
+            <select id="default-model" class="select"></select>
+          </div>
+          <label class="check"><input type="checkbox" id="demo"> <span>Demo mode — canned replies, no key and no cost. Good for trying the app.</span></label>
+        </div>
+        <div class="card">
+          <div class="flabel">Model chains for runs</div>
+          <div class="hint">Shared with the <span class="mono">nysera</span> CLI. Edit with <span class="mono">nysera model set &lt;category&gt; &lt;ids&gt;</span>.</div>
+          <div id="chains" class="chains"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

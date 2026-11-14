@@ -1,0 +1,46 @@
+{
+  "name": "nysera-desktop",
+  "productName": "Nysera",
+  "version": "0.1.0",
+  "description": "Nysera Desktop — chat with your AI agents and run multi-model lanes on your own projects.",
+  "author": "nysera-dev",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac dmg --arm64 --publish never",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "app.nysera.desktop",
+    "productName": "Nysera",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["src/**/*", "renderer/**/*", "build/icon.png", "package.json"],
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "Nysera-mac-arm64.${ext}"
+    },
+    "dmg": { "title": "Nysera" },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "artifactName": "Nysera-Setup-win-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Nysera"
+    }
+  }
+}
