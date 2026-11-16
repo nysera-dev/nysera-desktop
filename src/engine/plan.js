@@ -15,7 +15,7 @@ Rules:
 Reply with JSON only, no prose:
 {"summary":"one sentence","lanes":[{"id":"L1","title":"short","category":"code","depends_on":[],"prompt":"..."}]}`;
 
-function listProject(dir, max = 60) {
+export function listProject(dir, max = 60) {
   const out = [];
   const skip = new Set(['node_modules', '.git', '.nysera', 'dist', 'build', '.venv', '__pycache__']);
   (function walk(d, depth) {

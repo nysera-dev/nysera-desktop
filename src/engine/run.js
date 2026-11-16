@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ask, extractJson } from './models.js';
-import { makePlan } from './plan.js';
+import { makePlan, listProject } from './plan.js';
 import { c, STATUS, bar, pad, banner, log, fit, termCols } from './ui.js';
 
 const WORKER_SYSTEM = `You are one agent in Nysera's crew, working on a single lane of a bigger task.
@@ -24,12 +24,47 @@ Reply with JSON only: {"pass": true|false, "notes": "one or two sentences"}`;
 
 const now = () => new Date().toISOString().slice(11, 19);
 
+// Pull "### FILE: path" + fenced block pairs out of a model reply.
+// Models format this a little differently (bold, backticks round the path, a
+// blank line before the fence, ~~~ fences…), so the parser is forgiving.
 export function extractFiles(text) {
   const files = [];
-  const re = /###\s*FILE:\s*([^\n`]+)\n```[^\n]*\n([\s\S]*?)```/g;
+  const seen = new Set();
+  const add = (p, content) => {
+    p = String(p).trim().replace(/^[`'"*]+|[`'"*:]+$/g, '').trim();
+    if (!p || /\s/.test(p) || seen.has(p)) return;
+    seen.add(p); files.push({ path: p, content: content.endsWith('\n') ? content : content + '\n' });
+  };
+  const re = /^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?[ \t]*FILE[ \t]*:?[ \t]*(?:\*\*)?[ \t]*([^\n]+?)[ \t]*(?:\*\*)?[ \t]*\n(?:[ \t]*\n)*[ \t]*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)\n?[ \t]*\2[ \t]*(?:\n|$)/gim;
   let m;
-  while ((m = re.exec(text))) files.push({ path: m[1].trim(), content: m[2] });
+  while ((m = re.exec(text))) add(m[1], m[3]);
+  if (files.length) return files;
+  // Fallback: a fence whose info string names a file — ```python hello.py / ```hello.py / ```py title="hello.py"
+  const re2 = /^[ \t]*(`{3,}|~{3,})[ \t]*(?:[\w+-]+[ \t]+)?(?:title=|file=|path=)?["']?([\w./-]+\.[\w]+)["']?[ \t]*\n([\s\S]*?)\n?[ \t]*\1[ \t]*(?:\n|$)/gim;
+  while ((m = re2.exec(text))) add(m[2], m[3]);
   return files;
+}
+
+// Categories whose lanes are expected to hand back at least one file.
+const FILE_CATEGORIES = new Set(['code', 'test', 'docs', 'quick']);
+
+// Current contents of the project's small text files, so lanes can edit them.
+function projectContext(cwd, laneText) {
+  const list = listProject(cwd, 80).filter((f) => !f.endsWith('/'));
+  if (!list.length) return '';
+  const mentioned = list.filter((f) => laneText.includes(path.basename(f)));
+  const order = [...mentioned, ...list.filter((f) => !mentioned.includes(f))];
+  let budget = 40000;
+  const parts = [];
+  for (const rel of order) {
+    let st; try { st = fs.statSync(path.join(cwd, rel)); } catch { continue; }
+    if (st.size > 20000 || st.size > budget) continue;
+    let body; try { body = fs.readFileSync(path.join(cwd, rel), 'utf8'); } catch { continue; }
+    if (body.includes('\u0000')) continue;
+    parts.push(`### ${rel}\n\`\`\`\n${body}\n\`\`\``);
+    budget -= body.length;
+  }
+  return `Project files: ${list.join(', ')}` + (parts.length ? `\n\nCurrent contents (when you change a file, output the whole new file):\n${parts.join('\n\n')}` : '');
 }
 
 function safeJoin(root, rel) {
@@ -123,19 +158,34 @@ export async function run({ apiKey, chains, task, cwd, write, testCmd, review, c
           const deps = lane.depends_on.map((d) => `--- Output of ${d} (${byId[d].title}) ---\n${byId[d].output.slice(0, 12000)}`).join('\n\n');
           const cfg = chains[lane.category] || chains.code;
           try {
-            const res = await ask({
-              apiKey, chain: cfg.chain, effort: cfg.effort, signal,
-              messages: [
-                { role: 'system', content: WORKER_SYSTEM },
-                { role: 'user', content: `Overall task: ${task}\nPlan: ${plan.summary}\n\nYour lane (${lane.id} · ${lane.title}):\n${lane.prompt}${deps ? `\n\nInputs from earlier lanes:\n${deps}` : ''}` }
-              ],
-              onFallback: (m, r) => board.event(`${lane.id} ${c.orange('fallback')} ${m} → next (${r})`)
-            });
+            const ctx = write ? projectContext(cwd, `${lane.title} ${lane.prompt}`) : '';
+            const messages = [
+              { role: 'system', content: WORKER_SYSTEM },
+              { role: 'user', content: `Overall task: ${task}\nPlan: ${plan.summary}\n\nYour lane (${lane.id} · ${lane.title}):\n${lane.prompt}${deps ? `\n\nInputs from earlier lanes:\n${deps}` : ''}${ctx ? `\n\n${ctx}` : ''}` }
+            ];
+            const onFallback = (m, r) => board.event(`${lane.id} ${c.orange('fallback')} ${m} → next (${r})`);
+            let res = await ask({ apiKey, chain: cfg.chain, effort: cfg.effort, signal, messages, onFallback });
+            let files = extractFiles(res.content);
+            const wantsFiles = FILE_CATEGORIES.has(lane.category);
+            if (wantsFiles && !files.length && !stopped()) {
+              // One nudge: same lane, ask for the files in the required format.
+              board.event(`${lane.id} ${c.orange('retry')} no file in the reply — asking again`);
+              const again = await ask({ apiKey, chain: [res.model, ...cfg.chain.filter((m) => m !== res.model)], effort: cfg.effort, signal, onFallback,
+                messages: [...messages, { role: 'assistant', content: res.content }, { role: 'user', content: 'You did not output any file. Output every file this lane creates or changes now, in full, each as a line "### FILE: relative/path.ext" followed by a fenced code block. No other text.' }] });
+              const f2 = extractFiles(again.content);
+              if (f2.length) { res = { ...again, content: `${res.content}\n\n${again.content}` }; files = f2; }
+            }
             lane.output = res.content;
             lane.model = res.model;
-            lane.files = extractFiles(res.content);
-            lane.status = 'reported';
+            lane.files = files;
             fs.writeFileSync(path.join(runDir, 'lanes', `${lane.id}.md`), `# ${lane.id} · ${lane.title}\n\nmodel: ${res.model}\n\n${res.content}\n`);
+            if (wantsFiles && !files.length) {
+              lane.status = 'failed';
+              lane.evidence = 'no file in the model output';
+              board.event(`${lane.id} ${c.red('failed')} · no file in the output (see .nysera/runs/${id}/lanes/${lane.id}.md)`);
+              continue;
+            }
+            lane.status = 'reported';
             board.event(`${lane.id} ${c.yellow('reported done')} · ${lane.files.length} file(s) · ${res.model}`);
           } catch (e) {
             lane.status = stopped() ? 'skipped' : 'failed';
