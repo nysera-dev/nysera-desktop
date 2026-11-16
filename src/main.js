@@ -93,7 +93,7 @@ ipcMain.handle('chat:send', async (_e, { id, messages, model }) => {
     const res = await fetch(`${OPENROUTER}/chat/completions`, {
       method: 'POST', signal: ctrl.signal,
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://nysera.app', 'X-Title': 'Nysera Desktop' },
-      body: JSON.stringify({ model, messages, stream: true, temperature: 0.5 })
+      body: JSON.stringify({ model, messages, stream: true, temperature: 0.5, reasoning: { effort: 'low', exclude: true } })
     });
     if (!res.ok || !res.body) {
       let msg = `HTTP ${res.status}`;
@@ -105,6 +105,8 @@ ipcMain.handle('chat:send', async (_e, { id, messages, model }) => {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
+    let got = 0;
+    const finish = () => (got ? { ok: true, model } : { ok: false, error: 'The model sent an empty reply. Try again or pick another model.' });
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -114,11 +116,11 @@ ipcMain.handle('chat:send', async (_e, { id, messages, model }) => {
         const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
         if (!line.startsWith('data:')) continue;
         const data = line.slice(5).trim();
-        if (data === '[DONE]') return { ok: true, model };
-        try { const j = JSON.parse(data); const d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content; if (d) send('chat:delta', { id, delta: d }); } catch {}
+        if (data === '[DONE]') return finish();
+        try { const j = JSON.parse(data); if (j.error) return { ok: false, error: j.error.message || 'The model returned an error.' }; const d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content; if (d) { got += d.length; send('chat:delta', { id, delta: d }); } } catch {}
       }
     }
-    return { ok: true, model };
+    return finish();
   } catch (e) {
     if (ctrl.signal.aborted) return { ok: true, stopped: true };
     return { ok: false, error: 'Could not reach OpenRouter: ' + e.message };
