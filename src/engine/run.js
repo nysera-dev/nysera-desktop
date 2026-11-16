@@ -17,6 +17,18 @@ When you create or change a file, output it in full in exactly this form:
 Paths are relative to the project root. Never use absolute paths or "..".
 After the files, add 1-3 short lines on what you did.`;
 
+const FIX_SYSTEM = `You are Nysera's fixer. The crew wrote some files and the project's check command failed.
+Read the failing output and the current files, find the real cause, and fix it.
+Fix the code, not the check: never delete or weaken a test just to make it pass, unless the test itself is clearly wrong.
+Output only the files you change, each in full, in exactly this form:
+
+### FILE: relative/path.ext
+\`\`\`lang
+...entire file content...
+\`\`\`
+
+Then one short line on what was wrong.`;
+
 const REVIEW_SYSTEM = `NYSERA_REVIEWER
 You check another agent's lane output. Decide if it fully and correctly does what the lane asked.
 Be strict: missing pieces, obvious bugs, or placeholders mean fail.
@@ -122,7 +134,7 @@ class Board {
   }
 }
 
-export async function run({ apiKey, chains, task, cwd, write, testCmd, review, concurrency, tui, hooks, signal }) {
+export async function run({ apiKey, chains, task, cwd, write, testCmd, review, concurrency, tui, hooks, signal, fixAttempts = 2 }) {
   const id = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const runDir = path.join(cwd, '.nysera', 'runs', id);
   fs.mkdirSync(path.join(runDir, 'lanes'), { recursive: true });
@@ -161,7 +173,7 @@ export async function run({ apiKey, chains, task, cwd, write, testCmd, review, c
             const ctx = write ? projectContext(cwd, `${lane.title} ${lane.prompt}`) : '';
             const messages = [
               { role: 'system', content: WORKER_SYSTEM },
-              { role: 'user', content: `Overall task: ${task}\nPlan: ${plan.summary}\n\nYour lane (${lane.id} · ${lane.title}):\n${lane.prompt}${deps ? `\n\nInputs from earlier lanes:\n${deps}` : ''}${ctx ? `\n\n${ctx}` : ''}` }
+              { role: 'user', content: `Overall task: ${task}\nPlan: ${plan.summary}\n\nYour lane (${lane.id} · ${lane.title}):\n${lane.prompt}${deps ? `\n\nInputs from earlier lanes:\n${deps}` : ''}${testCmd ? `\n\nThe finished project is checked by running \`${testCmd}\` in the project root, so put files where that command finds them.` : ''}${ctx ? `\n\n${ctx}` : ''}` }
             ];
             const onFallback = (m, r) => board.event(`${lane.id} ${c.orange('fallback')} ${m} → next (${r})`);
             let res = await ask({ apiKey, chain: cfg.chain, effort: cfg.effort, signal, messages, onFallback });
@@ -232,8 +244,46 @@ export async function run({ apiKey, chains, task, cwd, write, testCmd, review, c
       board.event(`${c.purple('test')} running \`${testCmd}\` in ${write ? 'project' : 'run files'}…`);
       test = await runCommand(testCmd, where);
       fs.writeFileSync(path.join(runDir, 'test-output.txt'), test.out);
+      // Self-repair: on a failed check, hand the output to the fixer and try again.
+      let fixes = 0;
+      for (let attempt = 1; test.code !== 0 && attempt <= fixAttempts && !stopped() && reported.length; attempt++) {
+        board.event(`${c.red('test failed')} (exit ${test.code}) → ${c.orange('fix')} attempt ${attempt}/${fixAttempts}`);
+        const names = [...new Set(allFiles.map((f) => f.path))];
+        const current = names.map((n) => {
+          let body = ''; try { body = fs.readFileSync(safeJoin(where, n), 'utf8'); } catch { /* removed */ }
+          return `### ${n}\n\`\`\`\n${body.slice(0, 20000)}\n\`\`\``;
+        }).join('\n\n');
+        let fixed;
+        try {
+          fixed = await ask({
+            apiKey, chain: (chains.deep || chains.code).chain, effort: 'high', signal,
+            onFallback: (m, r) => board.event(`fix ${c.orange('fallback')} ${m} → next (${r})`),
+            messages: [
+              { role: 'system', content: FIX_SYSTEM },
+              { role: 'user', content: `Task: ${task}\nCheck command: ${testCmd} (exit ${test.code})\n\nCheck output (last part):\n${test.out.slice(-6000)}\n\nProject files: ${listProject(where, 80).join(', ')}\n\nFiles written by the crew, as they are now:\n${current}` }
+            ]
+          });
+        } catch (e) { board.event(`fix ${c.red('failed')} · ${e.message}`); break; }
+        const files = extractFiles(fixed.content);
+        fs.writeFileSync(path.join(runDir, `fix-${attempt}.md`), `# fix ${attempt}\n\nmodel: ${fixed.model}\n\n${fixed.content}\n`);
+        if (!files.length) { board.event(`fix ${attempt} · no file in the reply`); continue; }
+        for (const f of files) {
+          const dest = safeJoin(where, f.path);
+          if (!dest) { board.event(`${c.red('blocked')} unsafe path ${f.path}`); continue; }
+          const b = path.join(runDir, 'backup', f.path);
+          if (write && fs.existsSync(dest) && !fs.existsSync(b) && !allFiles.some((a) => a.path === f.path)) { fs.mkdirSync(path.dirname(b), { recursive: true }); fs.copyFileSync(dest, b); }
+          fs.mkdirSync(path.dirname(dest), { recursive: true });
+          fs.writeFileSync(dest, f.content);
+          const prev = allFiles.find((a) => a.path === f.path);
+          if (prev) prev.content = f.content; else allFiles.push({ ...f, lane: 'fix' });
+        }
+        fixes = attempt;
+        board.event(`fix ${attempt} · ${files.length} file(s) changed by ${fixed.model} → re-running check`);
+        test = await runCommand(testCmd, where);
+        fs.writeFileSync(path.join(runDir, 'test-output.txt'), test.out);
+      }
       if (test.code === 0) {
-        for (const l of reported) { l.status = 'verified'; l.evidence = `test passed: ${testCmd}`; }
+        for (const l of reported) { l.status = 'verified'; l.evidence = `test passed: ${testCmd}${fixes ? ` (after ${fixes} fix${fixes > 1 ? 'es' : ''})` : ''}`; }
         board.event(`${c.green('test passed')} → ${reported.length} lane(s) verified`);
       } else {
         board.event(`${c.red('test failed')} (exit ${test.code}) → lanes stay "reported"`);
