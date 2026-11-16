@@ -38,9 +38,31 @@ export function loadConfig() {
 }
 export function saveConfig(cfg) { writeJson(CONFIG_PATH, cfg); }
 
+// Model IDs Nysera used to ship as defaults. Some have since been retired on
+// OpenRouter, so saved chains that still contain them are moved to the
+// matching "latest" alias the next time they are loaded.
+const RETIRED = {
+  'anthropic/claude-sonnet-4': '~anthropic/claude-sonnet-latest',
+  'openai/gpt-4o': '~openai/gpt-latest',
+  'openai/gpt-4o-mini': '~openai/gpt-mini-latest',
+  'google/gemini-2.5-pro': '~google/gemini-pro-latest',
+  'google/gemini-2.5-flash': '~google/gemini-flash-latest',
+  'moonshotai/kimi-k2': '~moonshotai/kimi-latest',
+  'qwen/qwen-2.5-coder-32b-instruct': 'deepseek/deepseek-chat',
+  'mistralai/mistral-small': 'deepseek/deepseek-chat'
+};
+
 export function loadChains() {
   const saved = readJson(CHAINS_PATH, null);
-  return saved ? { ...DEFAULT_CHAINS, ...saved } : { ...DEFAULT_CHAINS };
+  if (!saved) return { ...DEFAULT_CHAINS };
+  let changed = false;
+  for (const v of Object.values(saved)) {
+    if (!v || !Array.isArray(v.chain)) continue;
+    const next = [...new Set(v.chain.map((m) => RETIRED[m] || m))];
+    if (next.join() !== v.chain.join()) { v.chain = next; changed = true; }
+  }
+  if (changed) { try { writeJson(CHAINS_PATH, saved); } catch { /* read-only home: use in memory */ } }
+  return { ...DEFAULT_CHAINS, ...saved };
 }
 export function saveChains(chains) { writeJson(CHAINS_PATH, chains); }
 
