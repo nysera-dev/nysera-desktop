@@ -46,3 +46,20 @@ export const log = {
   warn: (m) => console.log(c.yellow('!'), m),
   err: (m) => console.error(c.red('✗'), m)
 };
+
+// Visible width helpers: cut a styled line to the terminal width so it never wraps
+// (wrapping breaks the live board redraw on narrow screens like phones / Termux).
+export const termCols = () => Math.max(30, process.stdout.columns || 100);
+const ANSI = /^\x1b\[[0-9;]*m/;
+export function fit(s, cols = termCols()) {
+  const str = String(s);
+  const max = cols - 1;
+  if (str.replace(/\x1b\[[0-9;]*m/g, '').length <= max) return str;
+  let out = '', vis = 0, i = 0;
+  while (i < str.length && vis < max - 1) {
+    const m = str.slice(i).match(ANSI);
+    if (m) { out += m[0]; i += m[0].length; continue; }
+    out += str[i]; vis++; i++;
+  }
+  return out + '…' + (on ? '\x1b[0m' : '');
+}

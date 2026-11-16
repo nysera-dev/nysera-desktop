@@ -33,7 +33,7 @@ async function callOnce(apiKey, model, messages, maxTokens, signal) {
   }
   const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
   if (!content) throw new Error('empty response');
-  return { content, usage: data.usage || null };
+  return { content, usage: data.usage || null, resolved: data.model || null };
 }
 
 /**
@@ -53,11 +53,12 @@ export async function ask({ apiKey, chain, effort = 'medium', messages, onFallba
         : await callOnce(apiKey, model, messages, maxTokens, ctrl.signal);
       clearTimeout(t);
       attempts.push({ model, ok: true });
-      return { ...out, model, attempts };
+      const used = out.resolved && out.resolved !== model ? out.resolved : model;
+      return { content: out.content, usage: out.usage, model: used, attempts };
     } catch (e) {
       clearTimeout(t);
       if (signal && signal.aborted) throw new ModelError('stopped by user', attempts);
-      const reason = e.name === 'AbortError' ? 'timeout' : e.message;
+      const reason = e.name === 'AbortError' ? 'timeout' : String(e.message).split(/(?<=\.)\s|:\s/)[0].slice(0, 80);
       attempts.push({ model, ok: false, reason });
       if (onFallback) onFallback(model, reason);
       if (e.status === 401) throw new ModelError('OpenRouter rejected the API key (401). Run `nysera setup`.', attempts);

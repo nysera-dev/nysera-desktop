@@ -18,15 +18,13 @@
       sugs: ['Deploy a static site to Vercel', 'Write a GitHub Actions CI for Node', 'Point my domain to Vercel'] }
   ];
   const MODELS = [
-    ['google/gemini-2.5-flash', 'Gemini 2.5 Flash · fast'],
-    ['anthropic/claude-sonnet-4', 'Claude Sonnet 4'],
-    ['openai/gpt-4o', 'GPT-4o'],
-    ['openai/gpt-4o-mini', 'GPT-4o mini · cheap'],
-    ['google/gemini-2.5-pro', 'Gemini 2.5 Pro'],
+    ['~google/gemini-flash-latest', 'Gemini Flash (latest) · fast'],
+    ['~anthropic/claude-sonnet-latest', 'Claude Sonnet (latest)'],
+    ['~openai/gpt-latest', 'GPT (latest)'],
+    ['~openai/gpt-mini-latest', 'GPT mini (latest) · cheap'],
+    ['~google/gemini-pro-latest', 'Gemini Pro (latest)'],
     ['deepseek/deepseek-chat', 'DeepSeek Chat'],
-    ['qwen/qwen-2.5-coder-32b-instruct', 'Qwen 2.5 Coder'],
-    ['moonshotai/kimi-k2', 'Kimi K2'],
-    ['mistralai/mistral-small', 'Mistral Small']
+    ['~moonshotai/kimi-latest', 'Kimi (latest)']
   ];
 
   let settings = {};

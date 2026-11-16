@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ask, extractJson } from './models.js';
 import { makePlan } from './plan.js';
-import { c, STATUS, bar, pad, banner, log } from './ui.js';
+import { c, STATUS, bar, pad, banner, log, fit, termCols } from './ui.js';
 
 const WORKER_SYSTEM = `You are one agent in Nysera's crew, working on a single lane of a bigger task.
 Do only your lane. Be concrete and complete.
@@ -66,15 +66,23 @@ class Board {
   draw() {
     if (this.hooks.lanes) this.hooks.lanes(this.snapshot());
     if (!this.tui) return;
+    const cols = termCols();
     const rows = [this.header, ''];
     for (const l of this.lanes) {
       const st = STATUS[l.status];
       const pct = l.status === 'planned' ? 0 : l.status === 'running' ? Math.min(90, l.tick * 7) : 100;
-      rows.push(`  ${c.gray(pad(l.id, 4))}${pad(l.title, 30)} ${c.gray(pad(l.category, 9))}${bar(pct)}  ${st.color(pad(st.label, 9))}${c.gray(pad(l.model || '', 30))}`);
+      if (cols >= 110) {
+        rows.push(`  ${c.gray(pad(l.id, 4))}${pad(l.title, 30)} ${c.gray(pad(l.category, 9))}${bar(pct)}  ${st.color(pad(st.label, 9))}${c.gray(pad(l.model || '', 30))}`);
+      } else {
+        // narrow terminal (phone): id · title · short bar · status — model goes in the events
+        const bw = cols >= 70 ? 10 : 6;
+        const tw = Math.max(8, cols - (2 + 4 + 1 + bw + 2 + 9) - 1);
+        rows.push(`  ${c.gray(pad(l.id, 4))}${pad(l.title, tw)} ${bar(pct, bw)}  ${st.color(st.label)}`);
+      }
     }
     rows.push('', c.gray('  events'), ...this.events.map((e) => '  ' + e));
     if (this.lines) process.stdout.write(`\x1b[${this.lines}A\x1b[0J`);
-    process.stdout.write(rows.join('\n') + '\n');
+    process.stdout.write(rows.map((r) => fit(r, cols)).join('\n') + '\n');
     this.lines = rows.length;
   }
 }

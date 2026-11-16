@@ -25,7 +25,7 @@ function loadSettings() {
     try { apiKey = safeStorage.decryptString(Buffer.from(s.keyEnc, 'base64')); } catch { apiKey = ''; }
   } else if (s.keyPlain) apiKey = s.keyPlain;
   if (!apiKey) apiKey = loadCliConfig().apiKey || ''; // reuse `nysera setup` key if present
-  return { apiKey, chatModel: s.chatModel || 'google/gemini-2.5-flash', demo: !!s.demo, lastDir: s.lastDir || '' };
+  return { apiKey, chatModel: (s.chatModel && !/gemini-2\.5|claude-sonnet-4$|gpt-4o|qwen-2\.5|mistral-small|kimi-k2$/.test(s.chatModel) ? s.chatModel : '~google/gemini-flash-latest'), demo: !!s.demo, lastDir: s.lastDir || '' };
 }
 function saveSettings(patch) {
   const cur = readJson(settingsPath(), {});
