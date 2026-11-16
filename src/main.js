@@ -25,7 +25,7 @@ function loadSettings() {
     try { apiKey = safeStorage.decryptString(Buffer.from(s.keyEnc, 'base64')); } catch { apiKey = ''; }
   } else if (s.keyPlain) apiKey = s.keyPlain;
   if (!apiKey) apiKey = loadCliConfig().apiKey || ''; // reuse `nysera setup` key if present
-  return { apiKey, chatModel: (s.chatModel && !/gemini-2\.5|claude-sonnet-4$|gpt-4o|qwen-2\.5|mistral-small|kimi-k2$/.test(s.chatModel) ? s.chatModel : '~google/gemini-flash-latest'), demo: !!s.demo, lastDir: s.lastDir || '' };
+  return { apiKey, chatModel: (s.chatModel && !/gemini-2\.5|claude-sonnet-4$|gpt-4o|qwen-2\.5|mistral-small|kimi-k2$/.test(s.chatModel) ? s.chatModel : '~google/gemini-flash-latest'), lastDir: s.lastDir || '' };
 }
 function saveSettings(patch) {
   const cur = readJson(settingsPath(), {});
@@ -37,12 +37,13 @@ function saveSettings(patch) {
       else next.keyPlain = patch.apiKey;
     }
   }
-  for (const k of ['chatModel', 'demo', 'lastDir']) if (k in patch) next[k] = patch[k];
+  for (const k of ['chatModel', 'lastDir']) if (k in patch) next[k] = patch[k];
   writeJson(settingsPath(), next);
   applyDemo();
 }
-function applyDemo() { if (loadSettings().demo) process.env.NYSERA_MOCK = '1'; else delete process.env.NYSERA_MOCK; }
-const publicSettings = () => { const s = loadSettings(); return { hasKey: !!s.apiKey, keyHint: s.apiKey ? s.apiKey.slice(0, 8) + '…' + s.apiKey.slice(-4) : '', chatModel: s.chatModel, demo: s.demo, lastDir: s.lastDir, platform: process.platform, version: app.getVersion() }; };
+// Always real: there is no demo mode. Clear the CLI's offline flag in case it is set in the environment.
+function applyDemo() { delete process.env.NYSERA_MOCK; }
+const publicSettings = () => { const s = loadSettings(); return { hasKey: !!s.apiKey, keyHint: s.apiKey ? s.apiKey.slice(0, 8) + '…' + s.apiKey.slice(-4) : '', chatModel: s.chatModel, lastDir: s.lastDir, platform: process.platform, version: app.getVersion() }; };
 
 // ---------- window ----------
 function createWindow() {
@@ -84,17 +85,11 @@ ipcMain.handle('open:path', (_e, p) => { if (p && fs.existsSync(p)) shell.openPa
 // ---------- chat (streams deltas) ----------
 const chats = new Map();
 ipcMain.handle('chat:send', async (_e, { id, messages, model }) => {
-  const { apiKey, demo } = loadSettings();
+  const { apiKey } = loadSettings();
+  if (!apiKey) return { ok: false, error: 'Add your OpenRouter API key in Settings first (openrouter.ai → Keys).' };
   const ctrl = new AbortController();
   chats.set(id, ctrl);
   try {
-    if (demo || !apiKey) {
-      const text = demo
-        ? 'Demo mode: this reply is canned. Add your OpenRouter key in Settings and turn demo mode off for real answers.'
-        : 'Add your OpenRouter API key in Settings first (openrouter.ai → Keys).';
-      for (const w of text.split(' ')) { if (ctrl.signal.aborted) break; send('chat:delta', { id, delta: w + ' ' }); await new Promise((r) => setTimeout(r, 25)); }
-      return { ok: true, model: 'demo' };
-    }
     const res = await fetch(`${OPENROUTER}/chat/completions`, {
       method: 'POST', signal: ctrl.signal,
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://nysera.app', 'X-Title': 'Nysera Desktop' },
@@ -141,8 +136,8 @@ ipcMain.handle('dir:pick', async () => {
 });
 ipcMain.handle('run:start', async (_e, opts) => {
   if (current) return { ok: false, error: 'A run is already in progress.' };
-  const { apiKey, demo } = loadSettings();
-  if (!apiKey && !demo) return { ok: false, error: 'Add your OpenRouter key in Settings, or turn on demo mode.' };
+  const { apiKey } = loadSettings();
+  if (!apiKey) return { ok: false, error: 'Add your OpenRouter key in Settings first.' };
   if (!opts || !opts.task || !opts.dir) return { ok: false, error: 'Pick a folder and describe the task.' };
   if (!fs.existsSync(opts.dir)) return { ok: false, error: 'That folder does not exist.' };
   const ctrl = new AbortController();

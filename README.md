@@ -29,7 +29,7 @@ Chat with Nysera, Aria and Juno, or hand a whole task to the crew and watch the 
 - **Run lanes** — choose a project folder and describe a task. A planner splits it into lanes, lanes run in parallel on each category's model chain (with automatic fallback), and a lane is only **verified** when your test command passes or a reviewer model passes it. Same engine as the [`nysera` CLI](https://github.com/nysera-dev/nysera).
 - **Safe writes** — files are only written into the project when you tick *Write files*, and originals are backed up into the run folder first.
 - **Your key, your machine** — your OpenRouter key is stored locally, encrypted with your OS keychain when available. Model chains are shared with the CLI.
-- **Demo mode** — try the whole app with canned replies, no key and no cost.
+- **Always real** — every chat reply and every lane comes from a live model on your own OpenRouter key.
 
 <img src="docs/desktop-chat.png" alt="Chatting with the Nysera bot" width="860">
 
@@ -42,7 +42,7 @@ The app is not code-signed yet, so your OS will warn you the first time:
 | macOS | Open the app once, then go to **System Settings → Privacy & Security → Open Anyway**. |
 | Windows | On the blue SmartScreen screen, click **More info → Run anyway**. |
 
-Then open **Settings** in the app and paste an [OpenRouter API key](https://openrouter.ai/settings/keys) — or turn on demo mode.
+Then open **Settings** in the app and paste an [OpenRouter API key](https://openrouter.ai/settings/keys) to start.
 
 ## Develop
 

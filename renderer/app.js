@@ -88,7 +88,7 @@
     const cur = models[bot] || settings.chatModel;
     const opts = MODELS.some(([id]) => id === cur) ? MODELS : [[cur, cur], ...MODELS];
     for (const [id, label] of opts) sel.append(el('option', { value: id, selected: id === cur ? 'selected' : null }, label));
-    $('key-banner').hidden = settings.hasKey || settings.demo;
+    $('key-banner').hidden = settings.hasKey;
     const box = $('msgs'); box.textContent = '';
     const list = chats[bot] || [];
     if (!list.length) {
@@ -219,13 +219,12 @@
     $('key-status').className = 'hint';
     const sel = $('default-model'); sel.textContent = '';
     for (const [id, label] of MODELS) sel.append(el('option', { value: id, selected: id === settings.chatModel ? 'selected' : null }, label));
-    $('demo').checked = !!settings.demo;
     const chains = await api.run.chains();
     const box = $('chains'); box.textContent = '';
     for (const [k, v] of Object.entries(chains)) box.append(el('div', { class: 'c' }, el('span', { class: 'k' }, k), el('span', { class: 'e' }, v.effort), el('span', null, v.chain.join(' → '))));
   }
   function refreshSide() {
-    $('key-sub').textContent = settings.demo ? 'demo mode' : settings.hasKey ? 'OpenRouter connected' : 'add your API key';
+    $('key-sub').textContent = settings.hasKey ? 'OpenRouter connected' : 'add your API key';
     $('ver').textContent = `v${settings.version || ''}`;
   }
   $('key-save').addEventListener('click', async () => {
@@ -234,7 +233,7 @@
     $('key-status').textContent = 'Checking…';
     const t = await api.settings.testKey(k);
     if (!t.ok) { $('key-status').textContent = t.message; $('key-status').className = 'hint bad'; return; }
-    settings = await api.settings.set({ apiKey: k, demo: false });
+    settings = await api.settings.set({ apiKey: k });
     $('key').value = '';
     refreshSide(); renderSettings();
     $('key-status').textContent = `Saved and working: ${settings.keyHint}`; $('key-status').className = 'hint ok';
@@ -245,7 +244,6 @@
     $('key-status').textContent = t.message; $('key-status').className = t.ok ? 'hint ok' : 'hint bad';
   });
   $('default-model').addEventListener('change', async (e) => { settings = await api.settings.set({ chatModel: e.target.value }); });
-  $('demo').addEventListener('change', async (e) => { settings = await api.settings.set({ demo: e.target.checked }); refreshSide(); });
 
   document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => show(b.dataset.view)));
 
@@ -256,6 +254,6 @@
     chats = saved.chats || {}; models = saved.models || {};
     setDir(settings.lastDir);
     refreshSide();
-    show(settings.hasKey || settings.demo ? 'chat' : 'settings', 'nysera');
+    show(settings.hasKey ? 'chat' : 'settings', 'nysera');
   })();
 })();
